@@ -8,6 +8,8 @@
 # Province intensity = round( thermal_annual / total_annual × 820 )
 # Source: NBS Monthly electricity by province, 2024-2025
 # Country intensity: Ember Yearly Electricity Data (209 countries)
+#   Column used: "Emissions intensity (gCO2e/kWh)" where
+#   "Electricity source" == "Total generation" and "Area type" == "Country or economy"
 
 import os
 import pandas as pd
@@ -26,29 +28,62 @@ _DATA_DIR  = os.path.join(os.path.dirname(__file__), "data")
 _EMBER_CSV = os.path.join(_DATA_DIR, "release_generation_yearly_global.csv")
 
 _country_cache: dict[int, dict[str, float]] = {}
+_latest_year_cache: dict[str, int] | None = None
+_global_max_year: int | None = None
+
+
+def _load_latest_year_per_country() -> dict[str, int]:
+    """Return {country_name: latest_year_with_data} for all countries."""
+    global _latest_year_cache
+    if _latest_year_cache is not None:
+        return _latest_year_cache
+    df = pd.read_csv(_EMBER_CSV)
+    mask = (
+        (df["Area type"] == "Country or economy") &
+        (df["Electricity source"] == "Total generation")
+    )
+    sub = df[mask][["Area", "Year", "Emissions intensity (gCO2e/kWh)"]].dropna()
+    # For each country, find the latest year that has a non-negative intensity value
+    sub = sub[sub["Emissions intensity (gCO2e/kWh)"] >= 0]
+    _latest_year_cache = sub.groupby("Area")["Year"].max().to_dict()
+    return _latest_year_cache
+
+
+def get_global_max_year() -> int:
+    """Return the latest year available in the Ember dataset for any country."""
+    global _global_max_year
+    if _global_max_year is not None:
+        return _global_max_year
+    latest = _load_latest_year_per_country()
+    _global_max_year = max(latest.values()) if latest else 2023
+    return _global_max_year
 
 
 def _load_country_intensities(year: int) -> dict[str, float]:
+    """
+    Load pre-computed grid intensity (gCO2e/kWh) for all countries from the
+    Ember Yearly Electricity Data CSV for the given year.
+    Returns {country_name: intensity_gco2_kwh}.
+    """
     if year in _country_cache:
         return _country_cache[year]
 
     df = pd.read_csv(_EMBER_CSV)
-    df = df[df["Year"] == year].copy()
 
-    fossil_mask = df["Variable"].str.lower().str.contains(
-        "fossil|coal|gas|oil", na=False
+    # Filter to countries only, the given year, and the "Total generation" row
+    mask = (
+        (df["Area type"] == "Country or economy") &
+        (df["Year"] == year) &
+        (df["Electricity source"] == "Total generation")
     )
-    total_mask = df["Variable"].str.lower() == "total generation"
+    sub = df[mask][["Area", "Emissions intensity (gCO2e/kWh)"]].dropna()
 
-    fossil = df[fossil_mask].groupby("Country")["Value"].sum().rename("fossil_twh")
-    total  = df[total_mask].groupby("Country")["Value"].sum().rename("total_twh")
+    result = {
+        row["Area"]: round(float(row["Emissions intensity (gCO2e/kWh)"]), 1)
+        for _, row in sub.iterrows()
+        if row["Emissions intensity (gCO2e/kWh)"] >= 0
+    }
 
-    combined = pd.concat([fossil, total], axis=1).dropna()
-    combined["intensity"] = (
-        (combined["fossil_twh"] / combined["total_twh"]) * COAL_FACTOR
-    ).round().clip(lower=0, upper=COAL_FACTOR)
-
-    result = combined["intensity"].to_dict()
     _country_cache[year] = result
     return result
 
@@ -116,15 +151,15 @@ def estimate(
 
     try:
         intensities = _load_country_intensities(year)
-        intensity = intensities.get(country) or intensities.get(
-            next((k for k in intensities if k.lower() == country.lower()), ""),
-            None,
+        match_key = next(
+            (k for k in intensities if k.lower() == country.lower()), None
         )
-        if intensity is not None:
+        if match_key:
+            intensity = float(intensities[match_key])
             return {
-                "co2_grams":     round(float(intensity) * e, 6),
+                "co2_grams":     round(intensity * e, 6),
                 "water_ml":      _water_ml(e),
-                "co2_intensity": float(intensity),
+                "co2_intensity": intensity,
                 "method":        "country",
             }
     except Exception:
