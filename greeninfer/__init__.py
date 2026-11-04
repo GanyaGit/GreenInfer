@@ -1,5 +1,4 @@
 # greeninfer/__init__.py
-# GreenInfer — CO2 and water footprint estimator for AI inference
 #
 # Public API:
 #   greeninfer.estimate(country, province, year, energy_kwh, manual_factor)

@@ -1,161 +1,138 @@
 # greeninfer/estimator.py
-# Core CO2 and water footprint estimation logic
 #
-# Methodology:
-#   CO2 (grams) = thermal_fraction × 820 gCO2/kWh × energy_per_query_kWh
-#   Water (mL)  = energy_per_query_kWh × 1800 mL/kWh (WUE industry avg)
+# CO2:   intensity × energy_per_query_kWh
+# Water: Ren et al. (2025) WUE method
+#           onsite  = (E / PUE) × WUE_ONSITE  × 1000  mL
+#           offsite = E          × WUE_OFFSITE × 1000  mL
 #
-# References:
-#   - IEA (2023): 820 gCO2/kWh for thermal/coal generation
-#   - de Vries (2023): ~0.001 kWh per medium-complexity AI query
-#   - WUE industry average: 1.8 L/kWh = 1800 mL/kWh
-#   - OWID electricity mix dataset (bundled): Our World in Data
+# Province intensity = round( thermal_annual / total_annual × 820 )
+# Source: NBS Monthly electricity by province, 2024-2025
+# Country intensity: Ember Yearly Electricity Data (209 countries)
 
 import os
 import pandas as pd
+from .regions import CHINA_PROVINCES_BY_YEAR
 
-# Constants
-THERMAL_EMISSION_FACTOR = 820     # gCO2/kWh (IEA 2023, coal/thermal)
-ENERGY_PER_QUERY_KWH    = 0.001   # kWh per medium-complexity AI query
-WUE_ML_PER_KWH          = 1800    # mL water per kWh (1.8 L/kWh)
+ENERGY_PER_QUERY_KWH = 0.001   # Patterson et al. (2021)
+COAL_FACTOR          = 820     # gCO2/kWh -- IPCC AR5 (2014) coal lifecycle
 
-# Path to bundled OWID dataset
-_DATA_PATH = os.path.join(os.path.dirname(__file__), "data",
-                          "electricity-generation-by-source.csv")
+PUE             = 1.4          # Power Usage Effectiveness, industry average
+WUE_ONSITE      = 0.25         # L/kWh on-site (Ren et al. 2025)
+WUE_OFFSITE     = 4.73         # L/kWh off-site (Ren et al. 2025)
 
-_owid_df = None  # lazy-loaded cache
+WUE_ML_PER_KWH  = round(((1 / PUE) * WUE_ONSITE + WUE_OFFSITE) * 1000, 4)
 
+_DATA_DIR  = os.path.join(os.path.dirname(__file__), "data")
+_EMBER_CSV = os.path.join(_DATA_DIR, "release_generation_yearly_global.csv")
 
-def _load_owid():
-    """Load and cache the OWID electricity mix dataset."""
-    global _owid_df
-    if _owid_df is None:
-        _owid_df = pd.read_csv(_DATA_PATH)
-    return _owid_df
+_country_cache: dict[int, dict[str, float]] = {}
 
 
-def _get_thermal_fraction_owid(country: str, year: int = 2022) -> float | None:
-    """
-    Look up thermal fraction for a country from OWID dataset.
-    Returns float (0–1) or None if country not found.
+def _load_country_intensities(year: int) -> dict[str, float]:
+    if year in _country_cache:
+        return _country_cache[year]
 
-    Thermal sources = Coal + Gas + Oil
-    Total = Coal + Gas + Oil + Hydro + Nuclear + Wind + Solar +
-            Bioenergy + Other renewables
-    """
-    df = _load_owid()
+    df = pd.read_csv(_EMBER_CSV)
+    df = df[df["Year"] == year].copy()
 
-    # Try exact match first, then case-insensitive
-    mask = (df["Entity"].str.lower() == country.lower()) & (df["Year"] == year)
-    row = df[mask]
+    fossil_mask = df["Variable"].str.lower().str.contains(
+        "fossil|coal|gas|oil", na=False
+    )
+    total_mask = df["Variable"].str.lower() == "total generation"
 
-    # If exact year not found, use most recent available year
-    if row.empty:
-        mask_country = df["Entity"].str.lower() == country.lower()
-        country_data = df[mask_country]
-        if country_data.empty:
-            return None
-        row = country_data.sort_values("Year").iloc[[-1]]
+    fossil = df[fossil_mask].groupby("Country")["Value"].sum().rename("fossil_twh")
+    total  = df[total_mask].groupby("Country")["Value"].sum().rename("total_twh")
 
-    row = row.iloc[0]
+    combined = pd.concat([fossil, total], axis=1).dropna()
+    combined["intensity"] = (
+        (combined["fossil_twh"] / combined["total_twh"]) * COAL_FACTOR
+    ).round().clip(lower=0, upper=COAL_FACTOR)
 
-    thermal_cols = ["Coal", "Gas", "Oil"]
-    all_cols     = ["Coal", "Gas", "Oil", "Hydropower", "Nuclear",
-                    "Wind", "Solar", "Bioenergy", "Other renewables"]
+    result = combined["intensity"].to_dict()
+    _country_cache[year] = result
+    return result
 
-    # Sum only columns that exist and are not NaN
-    thermal = sum(row.get(c, 0) or 0 for c in thermal_cols if c in row.index)
-    total   = sum(row.get(c, 0) or 0 for c in all_cols   if c in row.index)
 
-    if total == 0:
-        return None
-
-    return thermal / total
+def _water_ml(energy_kwh: float) -> float:
+    onsite  = (energy_kwh / PUE) * WUE_ONSITE  * 1000
+    offsite =  energy_kwh        * WUE_OFFSITE  * 1000
+    return round(onsite + offsite, 4)
 
 
 def estimate(
-    country: str,
-    province: str | None = None,
-    year: int = 2022,
-    energy_kwh: float = ENERGY_PER_QUERY_KWH,
+    country:       str,
+    province:      str | None   = None,
+    year:          int          = 2025,
+    energy_kwh:    float | None = None,
     manual_factor: float | None = None,
 ) -> dict:
     """
-    Estimate CO2 and water footprint for one AI inference query.
+    Estimate CO2 (grams) and water (mL) for one AI inference query.
 
     Parameters
     ----------
-    country       : Country name (matched against OWID dataset)
-    province      : China province name (uses province-level intensity if given)
-    year          : Grid mix year to use (default 2022)
-    energy_kwh    : Energy consumed per query in kWh (default 0.001)
-    manual_factor : Override CO2 intensity in gCO2/kWh (for unlisted countries)
+    country       : Country name matching the Ember dataset (e.g. "Germany").
+    province      : Chinese province name; used only when country="China".
+    year          : Data year. For provinces: 2024 or 2025. For countries: any
+                    year available in the Ember CSV.
+    energy_kwh    : Measured energy in kWh. Defaults to ENERGY_PER_QUERY_KWH.
+    manual_factor : Override grid intensity (gCO2/kWh), skips all data lookups.
 
     Returns
     -------
-    dict with keys:
+    dict
         co2_grams     : float
         water_ml      : float
-        co2_intensity : float  (gCO2/kWh used)
-        method        : str    ("province" | "owid" | "manual" | "unknown")
-        country       : str
-        province      : str or None
+        co2_intensity : float | None
+        method        : "province" | "country" | "manual" | "unknown"
     """
-    from .regions import CHINA_PROVINCES, CHINA_NATIONAL_AVG
+    e = energy_kwh if energy_kwh is not None else ENERGY_PER_QUERY_KWH
 
-    method       = "unknown"
-    co2_intensity = None  # gCO2/kWh
-
-    # 1. Manual override takes top priority
     if manual_factor is not None:
-        co2_intensity = manual_factor
-        method        = "manual"
-
-    # 2. China province-level lookup
-    elif country.lower() == "china" and province is not None:
-        prov_key = province.strip().title()
-        if prov_key in CHINA_PROVINCES:
-            co2_intensity = CHINA_PROVINCES[prov_key]
-            method        = "province"
-        else:
-            # Unknown province → fall back to national average
-            co2_intensity = CHINA_NATIONAL_AVG
-            method        = "china_national"
-
-    # 3. OWID dataset lookup
-    else:
-        thermal_frac = _get_thermal_fraction_owid(country, year)
-        if thermal_frac is not None:
-            co2_intensity = thermal_frac * THERMAL_EMISSION_FACTOR
-            method        = "owid"
-        elif country.lower() == "china":
-            # China fallback: national average
-            co2_intensity = CHINA_NATIONAL_AVG
-            method        = "china_national"
-
-    # 4. Unknown country — return zeroes with warning
-    if co2_intensity is None:
+        intensity = float(manual_factor)
         return {
-            "co2_grams":     0.0,
-            "water_ml":      0.0,
-            "co2_intensity": None,
-            "method":        "unknown",
-            "country":       country,
-            "province":      province,
-            "warning":       (
-                f"Country '{country}' not found in dataset. "
-                "Pass manual_factor=<gCO2/kWh> to override."
-            ),
+            "co2_grams":     round(intensity * e, 6),
+            "water_ml":      _water_ml(e),
+            "co2_intensity": intensity,
+            "method":        "manual",
         }
 
-    co2_grams = co2_intensity * energy_kwh
-    water_ml  = energy_kwh * WUE_ML_PER_KWH
+    if country.lower() == "china" and province:
+        avail = sorted(CHINA_PROVINCES_BY_YEAR.keys())
+        yr    = max(avail[0], min(avail[-1], year))
+        prov_map = CHINA_PROVINCES_BY_YEAR[yr]
+
+        match = next(
+            (k for k in prov_map if k.lower() == province.lower()), None
+        )
+        if match:
+            intensity = float(prov_map[match])
+            return {
+                "co2_grams":     round(intensity * e, 6),
+                "water_ml":      _water_ml(e),
+                "co2_intensity": intensity,
+                "method":        "province",
+            }
+
+    try:
+        intensities = _load_country_intensities(year)
+        intensity = intensities.get(country) or intensities.get(
+            next((k for k in intensities if k.lower() == country.lower()), ""),
+            None,
+        )
+        if intensity is not None:
+            return {
+                "co2_grams":     round(float(intensity) * e, 6),
+                "water_ml":      _water_ml(e),
+                "co2_intensity": float(intensity),
+                "method":        "country",
+            }
+    except Exception:
+        pass
 
     return {
-        "co2_grams":     round(co2_grams, 4),
-        "water_ml":      round(water_ml,  4),
-        "co2_intensity": round(co2_intensity, 2),
-        "method":        method,
-        "country":       country,
-        "province":      province,
+        "co2_grams":     None,
+        "water_ml":      _water_ml(e),
+        "co2_intensity": None,
+        "method":        "unknown",
     }

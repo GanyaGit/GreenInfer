@@ -1,6 +1,7 @@
 # greeninfer/tracker.py
-# Context manager for wrapping real AI inference calls
-# Auto-detects NVIDIA GPU via pynvml; falls back to time-based CPU estimate
+#
+# Context manager for wrapping real AI inference calls.
+# Tries to read GPU power via pynvml; falls back to a time-based CPU estimate.
 #
 # Usage:
 #   with greeninfer.track(country="China", province="Shanghai") as t:
@@ -10,24 +11,27 @@
 import time
 from .estimator import estimate, ENERGY_PER_QUERY_KWH, WUE_ML_PER_KWH
 
-# CPU power estimate when no GPU is available
-CPU_WATTS_ESTIMATE = 15.0  # watts (typical inference CPU core load)
+CPU_WATTS_ESTIMATE = 15.0  # typical inference CPU core load, watts
 
 
 class InferenceTracker:
     """
     Context manager that measures energy during inference and
-    converts it to CO2 + water footprint.
+    converts it to CO2 and water footprint.
     """
 
-    def __init__(self, country: str, province: str | None = None,
-                 year: int = 2022, manual_factor: float | None = None):
+    def __init__(
+        self,
+        country:       str,
+        province:      str | None   = None,
+        year:          int          = 2025,
+        manual_factor: float | None = None,
+    ):
         self.country       = country
         self.province      = province
         self.year          = year
         self.manual_factor = manual_factor
 
-        # Filled after __exit__
         self.co2_grams     = None
         self.water_ml      = None
         self.co2_intensity = None
@@ -45,7 +49,6 @@ class InferenceTracker:
         return self
 
     def _try_init_gpu(self):
-        """Try to initialise pynvml for GPU power reading."""
         try:
             import pynvml
             pynvml.nvmlInit()
@@ -58,17 +61,15 @@ class InferenceTracker:
         elapsed = time.perf_counter() - self._start_time
         self.duration_s = elapsed
 
-        # Measure energy
         if self._use_gpu:
-            energy_kwh = self._gpu_energy_kwh(elapsed)
+            energy_kwh  = self._gpu_energy_kwh(elapsed)
             meas_method = "gpu_measured"
         else:
-            energy_kwh = self._cpu_energy_kwh(elapsed)
+            energy_kwh  = self._cpu_energy_kwh(elapsed)
             meas_method = "cpu_estimated"
 
         self.energy_kwh = energy_kwh
 
-        # Get CO2/water from estimator
         result = estimate(
             country=self.country,
             province=self.province,
@@ -80,10 +81,8 @@ class InferenceTracker:
         self.co2_grams     = result["co2_grams"]
         self.water_ml      = result["water_ml"]
         self.co2_intensity = result.get("co2_intensity")
-        # Combine grid method + measurement method
         self.method        = f"{meas_method}+{result['method']}"
 
-        # Clean up pynvml
         if self._use_gpu:
             try:
                 import pynvml
@@ -91,23 +90,19 @@ class InferenceTracker:
             except Exception:
                 pass
 
-        return False  # do not suppress exceptions
+        return False
 
     def _gpu_energy_kwh(self, elapsed_s: float) -> float:
-        """Read GPU power draw and compute energy consumed."""
         try:
             import pynvml
             power_mw = pynvml.nvmlDeviceGetPowerUsage(self._nvml_handle)
             power_w  = power_mw / 1000.0
         except Exception:
-            power_w = 100.0  # fallback: 100W GPU estimate
-        energy_wh  = power_w * (elapsed_s / 3600.0)
-        return energy_wh / 1000.0  # → kWh
+            power_w = 100.0  # fallback if reading fails
+        return power_w * (elapsed_s / 3600.0) / 1000.0
 
     def _cpu_energy_kwh(self, elapsed_s: float) -> float:
-        """Estimate CPU energy from elapsed time and CPU_WATTS_ESTIMATE."""
-        energy_wh = CPU_WATTS_ESTIMATE * (elapsed_s / 3600.0)
-        return energy_wh / 1000.0  # → kWh
+        return CPU_WATTS_ESTIMATE * (elapsed_s / 3600.0) / 1000.0
 
     def __repr__(self):
         if self.co2_grams is None:
@@ -121,8 +116,12 @@ class InferenceTracker:
         )
 
 
-def track(country: str, province: str | None = None,
-          year: int = 2022, manual_factor: float | None = None) -> InferenceTracker:
+def track(
+    country:       str,
+    province:      str | None   = None,
+    year:          int          = 2025,
+    manual_factor: float | None = None,
+) -> InferenceTracker:
     """
     Return an InferenceTracker context manager.
 

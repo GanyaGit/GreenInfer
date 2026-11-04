@@ -1,0 +1,283 @@
+/* ── Reset & base ─────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: #f0f4f8;
+  color: #2d3748;
+  min-height: 100vh;
+}
+
+/* ── App shell ───────────────────────────────────────── */
+.app {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* ── Header ──────────────────────────────────────────── */
+.app-header {
+  text-align: center;
+}
+.app-header h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1a7a4a;
+}
+.subtitle {
+  margin-top: 4px;
+  color: #718096;
+  font-size: 0.95rem;
+}
+
+/* ── Sections ────────────────────────────────────────── */
+.chart-section,
+.estimator-section {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+}
+
+.chart-section h2,
+.estimator-section h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #2d3748;
+}
+
+.chart-hint {
+  font-size: 0.82rem;
+  color: #a0aec0;
+  margin-bottom: 16px;
+}
+
+.loading-msg {
+  color: #a0aec0;
+  font-size: 0.9rem;
+  padding: 24px 0;
+  text-align: center;
+}
+
+/* ── Mode toggle ─────────────────────────────────────── */
+.mode-toggle {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 20px;
+}
+
+.toggle-btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f7fafc;
+  color: #4a5568;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.toggle-btn:hover {
+  border-color: #68d391;
+  background: #f0fff4;
+}
+
+.toggle-btn.active {
+  border-color: #1a7a4a;
+  background: #1a7a4a;
+  color: #fff;
+  font-weight: 600;
+}
+
+/* ── Form ────────────────────────────────────────────── */
+.form-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.form-row .form-group {
+  flex: 1;
+  margin-bottom: 16px;
+}
+
+.form-row .form-group-year {
+  flex: 0 0 180px;
+}
+
+@media (max-width: 520px) {
+  .form-row { flex-direction: column; }
+  .form-row .form-group-year { flex: 1; }
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #4a5568;
+}
+
+.optional {
+  font-weight: 400;
+  color: #a0aec0;
+  font-size: 0.82rem;
+}
+
+.form-group select {
+  padding: 10px 12px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #2d3748;
+  background: #fff;
+  appearance: auto;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  width: 100%;
+}
+
+.form-group select:focus {
+  outline: none;
+  border-color: #1a7a4a;
+}
+
+/* ── Estimate button ─────────────────────────────────── */
+.estimate-btn {
+  width: 100%;
+  padding: 12px;
+  background: #1a7a4a;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-top: 4px;
+}
+
+.estimate-btn:hover:not(:disabled) {
+  background: #155f3a;
+}
+
+.estimate-btn:disabled {
+  background: #a0aec0;
+  cursor: not-allowed;
+}
+
+/* ── Error ───────────────────────────────────────────── */
+.error-msg {
+  margin-top: 12px;
+  color: #c53030;
+  font-size: 0.9rem;
+  background: #fff5f5;
+  border: 1px solid #fed7d7;
+  border-radius: 6px;
+  padding: 10px 14px;
+}
+
+/* ── Result card ─────────────────────────────────────── */
+.result-card {
+  margin-top: 20px;
+  border: 1.5px solid #c6f6d5;
+  border-radius: 10px;
+  padding: 18px;
+  background: #f0fff4;
+}
+
+.result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.result-location {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #1a7a4a;
+}
+
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 520px) {
+  .result-grid { grid-template-columns: 1fr; }
+}
+
+.result-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 12px;
+  text-align: center;
+}
+
+.result-label {
+  font-size: 0.78rem;
+  color: #718096;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.result-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #2d3748;
+}
+
+.result-value small {
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: #718096;
+  margin-left: 2px;
+}
+
+.result-method-note {
+  font-size: 0.8rem;
+  color: #718096;
+  margin-top: 4px;
+}
+
+.result-year {
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: #718096;
+}
+
+.result-year-note {
+  color: #e67e22;
+  font-style: italic;
+}
+
+/* ── Footer ──────────────────────────────────────────── */
+.app-footer {
+  text-align: center;
+  font-size: 0.78rem;
+  color: #a0aec0;
+  padding-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
