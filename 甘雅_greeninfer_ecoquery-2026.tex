@@ -1,0 +1,505 @@
+% greeninfer_ecoquery.tex
+% Compile: pdflatex greeninfer_ecoquery.tex  (run twice for references)
+
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{microtype}
+\usepackage{authblk}
+\usepackage{abstract}
+\usepackage{parskip}
+\usepackage{setspace}
+\usepackage[font=it,labelfont=it,position=below]{caption}
+
+\hypersetup{
+  colorlinks = true,
+  linkcolor  = blue!70!black,
+  citecolor  = blue!70!black,
+  urlcolor   = blue!70!black,
+}
+
+\lstset{
+  basicstyle      = \ttfamily\small,
+  breaklines      = true,
+  frame           = single,
+  backgroundcolor = \color{gray!8},
+}
+
+\title{\textbf{GreenInfer + EcoQuery: Estimating the CO\textsubscript{2} and Water
+       Footprint of AI Inference Queries}}
+
+\author{Gayani Upeksha}
+\date{November 2026}
+
+\begin{document}
+\maketitle
+\thispagestyle{empty}
+
+\begin{abstract}
+The rapid growth of AI services has raised growing concerns about their
+environmental cost. Each inference query to a large language model consumes
+measurable electricity and produces CO\textsubscript{2} emissions and water
+consumption that vary considerably by location and local energy mix. Most
+existing estimation tools either target training workloads, lack regional
+detail, or ignore water footprint entirely. This paper introduces
+\textbf{GreenInfer}, a Python library, and \textbf{EcoQuery}, an interactive
+web dashboard, that together estimate the CO\textsubscript{2} emissions and
+water footprint of a single AI inference query across 209 countries and
+all 31 Chinese provinces. Country grid intensity draws on Ember data
+spanning 2000--2025, enabling historical and cross-year comparison even
+though AI inference at scale only became common from 2022 onward
+(2025 data are partial, covering approximately 93 countries at time of writing);
+provincial data covers 2024--2025. Provincial carbon
+intensity is derived from National Bureau of Statistics (NBS) monthly
+generation data disaggregated by source, using the IPCC AR5 lifecycle
+emission factor for thermal generation. Water footprint follows the
+Water Usage Effectiveness (WUE) methodology of Ren et al.\ (2025). Results show that the 2025 per-query CO2 emissions range from
+26~gCO2 (Xizang) to 787~gCO2 (Beijing), while water consumption
+is approximately 4.9~mL per query regardless of location. Both tools are open-source.
+\end{abstract}
+
+\vspace{1em}
+\noindent\textbf{Keywords:} AI inference, carbon footprint, water footprint,
+China electricity, carbon intensity, sustainability
+
+\section{Introduction}
+
+Large language models have become routine infrastructure. Since ChatGPT's
+public launch in late 2022, AI inference---generating a response to a user
+query---has grown into one of the most common computational workloads
+worldwide. Unlike training, which happens once and has attracted substantial
+research attention, inference runs billions of times per day and its
+cumulative environmental cost is poorly understood.
+
+A single AI inference query consumes roughly 0.001~kWh of
+electricity~\cite{patterson2021}, around ten times the energy of a
+traditional web search. The resulting CO\textsubscript{2} emissions depend
+on the carbon intensity of the grid powering the data center, which varies
+substantially by country, region, and year. A query served from a
+coal-heavy data center in Shanxi produces far more emissions than the same
+query served from a hydropower-dominated grid in Sichuan. Tools such as
+CodeCarbon~\cite{codecarbon}, ML CO\textsubscript{2}
+Impact~\cite{mlco2impact}, and Green Algorithms~\cite{greenalgorithms}
+estimate emissions for training and batch workloads, but none offer
+per-query estimates at the Chinese provincial level, and none integrate
+water footprint.
+
+Water is an overlooked dimension of AI's environmental impact. Data centers
+use water for cooling, and electricity generation itself consumes water
+upstream. Ren et al.\ (2025)~\cite{ren2025} developed a WUE-based framework
+separating on-site and off-site water consumption, making per-query water
+estimation tractable.
+
+This paper contributes:
+\begin{enumerate}
+  \item \textbf{GreenInfer}: an open-source Python library estimating
+        CO\textsubscript{2} and water footprint per AI inference query for
+        any country or Chinese province.
+  \item \textbf{EcoQuery}: an interactive dashboard covering 209 countries
+        (2000--2025) and 31 Chinese provinces (2024--2025).
+  \item A provincial carbon intensity dataset derived from NBS monthly
+        generation data, the first calibrated to the AI inference era.
+  \item Integration of the Ren et al.\ (2025) WUE methodology at regional
+        granularity.
+\end{enumerate}
+
+\section{Related Work}
+
+\paragraph{AI energy and carbon tools.}
+CodeCarbon~\cite{codecarbon} measures real-time energy consumption of Python
+code and maps it to CO\textsubscript{2} using regional grid intensity.
+ML CO\textsubscript{2} Impact~\cite{mlco2impact} offers a web calculator for
+training emissions based on hardware and cloud provider.
+Green Algorithms~\cite{greenalgorithms} extends this to HPC workloads. All
+three share a fundamental limitation: they target training and batch jobs,
+not individual inference queries, and none resolve China at the provincial
+level.
+
+\paragraph{China electricity carbon intensity.}
+The CEADs project~\cite{ceads} provides provincial CO\textsubscript{2}
+inventories for China from 2000 to 2019, covering energy, industry, and
+agriculture. The 2019 cutoff predates large-scale LLM deployment, and
+CEADs does not disaggregate electricity generation by source at the
+provincial level in a way suitable for intensity calculations. The NBS
+publishes monthly provincial generation broken down by source (thermal,
+hydro, nuclear, wind, solar), providing the most current and granular data
+available for this purpose.
+
+\paragraph{Water footprint of AI.}
+Ren et al.\ (2025)~\cite{ren2025} introduced a systematic framework for
+AI inference water footprint, distinguishing on-site cooling water from
+off-site water consumed during electricity generation. Their WUE
+methodology provides the first peer-reviewed basis for per-query water
+estimation. Li et al.\ (2023)~\cite{li2023} estimated that training GPT-3
+consumed approximately 700,000 liters of water, drawing wider attention to
+AI's water impact.
+
+\paragraph{Gap addressed.}
+No existing tool combines per-query CO\textsubscript{2} estimation,
+Chinese provincial granularity using current NBS data, and water footprint
+via the Ren et al.\ (2025) WUE framework. GreenInfer and EcoQuery fill
+this gap.
+
+\section{Methodology}
+
+\subsection{Energy per Query}
+
+Following Patterson et al.\ (2021)~\cite{patterson2021}, we use a
+per-query energy constant of $E = 0.001$~kWh. This reflects typical
+transformer inference on modern GPU hardware and is consistent with widely
+cited values in the literature.
+
+\subsection{CO\textsubscript{2} Emissions}
+
+Per-query CO\textsubscript{2} is:
+\begin{equation}
+  \text{CO}_2 \; (\text{g}) = E \times I
+\end{equation}
+where $E$ is energy per query (kWh) and $I$ is grid carbon intensity
+(gCO\textsubscript{2}/kWh) at the data center location.
+
+\paragraph{World countries.}
+For 209 countries we use Ember Yearly Electricity Data~\cite{ember}, which
+provides emissions intensity values per country from 2000 to 2025.
+Although large-scale AI inference only became common from late 2022, we
+include the full 2000--2025 range for two reasons. First, the grid carbon
+intensity of a country in any given year is a property of its electricity
+system, independent of whether AI workloads existed at that time; a
+researcher or policymaker may legitimately ask what a hypothetical inference
+query \emph{would} have cost had it been run in 2010. Second, historical
+coverage enables trend analysis---showing how rapidly a country's grid has
+decarbonised---which contextualises current per-query footprints. Users who
+wish to restrict analysis to the AI era can simply query years from 2022
+onward.
+
+\paragraph{Chinese provinces.}
+For all 31 provinces we derive intensity from NBS monthly generation data
+disaggregated by source. The formula is:
+\begin{equation}
+  I_{\text{province}} =
+  \frac{\text{Thermal}_{\text{annual}} \times 820}%
+       {(\text{Thermal} + \text{Hydro} + \text{Nuclear} + \text{Wind} +
+         \text{Solar})_{\text{annual}}}
+\end{equation}
+
+The factor 820~gCO\textsubscript{2}/kWh is the IPCC AR5 lifecycle emission
+factor for coal~\cite{ipcc2014}. China's thermal generation is approximately
+95\% coal, making this assumption reasonable at the provincial level. Zero
+emissions are assigned to hydro, nuclear, wind, and solar.
+
+Data cover 2024 and 2025. The NBS combines January and February figures and
+releases them in March, so these two months are absent from individual
+monthly files. Annual totals are estimated from 10 available months scaled
+by 12/10; this assumption is discussed as a limitation in
+Section~\ref{sec:limitations}.
+
+\subsection{Water Footprint}
+
+We follow the WUE framework of Ren et al.\ (2025)~\cite{ren2025}:
+\begin{equation}
+  \text{water} \; (\text{mL}) =
+  \left(\frac{E}{\text{PUE}} \times \text{WUE}_{\text{onsite}}
+   + E \times \text{WUE}_{\text{offsite}}\right) \times 1000
+\end{equation}
+
+On-site WUE captures data center cooling; off-site WUE captures water
+consumed during electricity generation. Parameter values:
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{lll}
+\toprule
+Parameter & Value & Source \\
+\midrule
+$E$ & 0.001~kWh & Patterson et al.\ (2021) \\
+PUE & 1.4 & Industry average \\
+WUE\textsubscript{onsite}  & 0.25~L/kWh & Ren et al.\ (2025) \\
+WUE\textsubscript{offsite} & 4.73~L/kWh & Ren et al.\ (2025) \\
+\bottomrule
+\end{tabular}
+\vspace{4pt}
+\caption{Water footprint model parameters.}
+\end{table}
+
+This gives approximately \textbf{4.91~mL per query}, uniform across all
+regions since the parameters reflect data center and grid averages rather
+than region-specific values.
+
+\subsection{Data Sources}
+
+\begin{table}[h]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{lll}
+\toprule
+Data & Source & Coverage \\
+\midrule
+Country electricity intensity   & Ember~\cite{ember}      & 209 countries, 2000--2025 \\
+China provincial generation     & NBS~\cite{nbs}          & 31 provinces, 2024--2025 \\
+Thermal emission factor         & IPCC AR5~\cite{ipcc2014}& 820~gCO\textsubscript{2}/kWh \\
+Water footprint parameters      & Ren et al.~\cite{ren2025} & WUE onsite + offsite \\
+\bottomrule
+\end{tabular}
+\vspace{4pt}
+\caption{Data sources.}
+\end{table}
+
+\section{Results}
+
+\subsection{Chinese Provincial CO\textsubscript{2} Intensity}
+
+Table~\ref{tab:provinces} shows estimated intensity for all 31 provinces in
+2024 and 2025. The range is wide, reflecting the stark variation in China's
+regional energy mix. ($\Delta$ = change from 2024 to 2025.)
+
+\begin{table}[htbp]
+\centering
+\renewcommand{\arraystretch}{1.2}
+\label{tab:provinces}
+\small
+\begin{tabular}{lrrr}
+\toprule
+Province & 2024 & 2025 & $\Delta$ \\
+\midrule
+Beijing        & 795 & 787 & $-$8  \\
+Shanghai       & 794 & 784 & $-$10 \\
+Tianjin        & 748 & 729 & $-$19 \\
+Anhui          & 738 & 719 & $-$19 \\
+Shaanxi        & 713 & 701 & $-$12 \\
+Jiangxi        & 665 & 670 & $+$5  \\
+Shanxi         & 687 & 663 & $-$24 \\
+Jiangsu        & 666 & 653 & $-$13 \\
+Shandong       & 686 & 651 & $-$35 \\
+Henan          & 676 & 650 & $-$26 \\
+Zhejiang       & 606 & 611 & $+$5  \\
+Chongqing      & 646 & 610 & $-$36 \\
+Ningxia        & 618 & 593 & $-$25 \\
+Guangdong      & 583 & 589 & $+$6  \\
+Inner Mongolia & 624 & 579 & $-$45 \\
+Heilongjiang   & 585 & 575 & $-$10 \\
+Hebei          & 611 & 567 & $-$44 \\
+Xinjiang       & 595 & 561 & $-$34 \\
+Jilin          & 488 & 489 & $+$1  \\
+Hunan          & 471 & 483 & $+$12 \\
+Hainan         & 556 & 479 & $-$77 \\
+Fujian         & 478 & 476 & $-$2  \\
+Guizhou        & 538 & 463 & $-$75 \\
+Liaoning       & 463 & 455 & $-$8  \\
+Gansu          & 412 & 429 & $+$17 \\
+Hubei          & 411 & 370 & $-$41 \\
+Guangxi        & 393 & 347 & $-$46 \\
+Sichuan        & 147 & 145 & $-$2  \\
+Yunnan         & 107 &  97 & $-$10 \\
+Qinghai        &  99 & 103 & $+$4  \\
+Xizang (Tibet) &  23 &  26 & $+$3  \\
+\bottomrule
+\end{tabular}
+\vspace{4pt}
+\caption{CO\textsubscript{2} intensity (gCO\textsubscript{2}/kWh) for all
+31 Chinese provinces, 2024 and 2025. Derived from NBS monthly generation
+data using the IPCC AR5 coal factor of 820~gCO\textsubscript{2}/kWh.
+Sorted by 2025 intensity, descending.}
+\end{table}
+
+The highest intensities are in eastern industrial provinces where thermal
+generation dominates: Beijing (787), Shanghai (784), and Tianjin (729) in
+2025. The lowest are in the hydropower-rich southwest: Xizang, Qinghai, and
+Sichuan all fall below 150~gCO\textsubscript{2}/kWh. The gap between
+Beijing and Xizang---roughly 30$\times$---illustrates how much geographic
+placement matters for the environmental cost of AI services.
+
+\subsection{International Comparison}
+
+Using Ember data for 2024, per-query CO\textsubscript{2} spans an even
+wider range internationally. Iceland, Norway, and Paraguay approach
+zero due to near-total renewable generation. South Africa, Poland, and
+Kazakhstan are among the highest due to coal dependence. China's national
+average (around 550~gCO\textsubscript{2}/kWh in 2024) sits in the
+upper-middle range; the United States (around 370) and Germany (around 290)
+are considerably lower as a result of recent renewables growth.
+
+\subsection{Year-on-Year Trend}
+
+Comparing 2024 to 2025 across all 31 provinces, the dominant pattern is
+modest decline. Inner Mongolia ($-45$), Guangxi ($-46$), Hebei ($-44$),
+Chongqing ($-36$), and Hainan ($-77$) recorded the largest reductions,
+consistent with accelerating wind and solar capacity additions in those
+regions. A handful of provinces show slight increases---Jiangxi (+5),
+Zhejiang (+5), Guangdong (+6), Gansu (+17), Hunan (+12)---likely reflecting
+inter-annual variation in hydro availability and load growth outpacing new
+generation in those grids. Xizang remains the cleanest at
+23--26~gCO\textsubscript{2}/kWh across both years, powered almost entirely
+by run-of-river hydropower.
+
+\subsection{Water Footprint}
+
+Each inference query consumes approximately \textbf{4.91~mL of water}:
+\begin{itemize}
+  \item \textbf{0.18~mL} on-site (data center cooling):
+        $0.001 / 1.4 \times 0.25 \times 1000$
+  \item \textbf{4.73~mL} off-site (electricity generation):
+        $0.001 \times 4.73 \times 1000$
+\end{itemize}
+
+Off-site water accounts for 96\% of the total. This means that efficiency
+improvements at the data center level have limited impact on overall water
+footprint; reductions require cleaner electricity grids or lower-water
+generation technologies upstream.
+
+\section{Discussion}
+
+\subsection{Limitations}
+\label{sec:limitations}
+
+\paragraph{January-February scaling.}
+The NBS releases January and February provincial generation figures combined,
+delayed until March, so both months are absent from individual monthly
+files. Annual totals for 2024 and 2025 are estimated from 10 months scaled
+by 12/10. This approach assumes the missing months have a proportional
+generation mix. In practice, January-February coincides with peak heating
+demand in northern provinces, which may push the thermal share slightly
+higher than the year-round average. Future work should substitute the
+released combined figures once available.
+
+\paragraph{Thermal emission factor.}
+We apply a uniform 820~gCO\textsubscript{2}/kWh factor to all thermal
+generation in all provinces. This is appropriate given that China's thermal
+mix is around 95\% coal nationally. However, some provinces have meaningful
+gas-fired capacity (emission factor around 490~gCO\textsubscript{2}/kWh),
+and the provincial thermal fuel split is not publicly available in NBS data.
+This may cause slight overestimation in provinces with significant gas.
+
+\paragraph{Fixed energy per query.}
+The 0.001~kWh figure is a literature average for large transformer models on
+modern GPU hardware. Actual energy varies considerably with model size,
+hardware generation, and batch configuration. GreenInfer accepts a custom
+\texttt{energy\_kwh} parameter to mitigate this for users with hardware
+measurements.
+
+\paragraph{Water footprint uniformity.}
+The WUE parameters are global averages. Regional values would improve
+accuracy---water consumption per kWh of generation depends on technology
+(hydro vs.\ gas cooling vs.\ coal) and local climate---but are not currently
+available at the provincial level.
+
+\subsection{Absolute vs.\ Intensity-Based Trends}
+
+A key nuance in interpreting the national trend data is the distinction
+between carbon intensity (gCO\textsubscript{2}/kWh) and total carbon
+emissions. China's grid carbon intensity has declined steadily---from
+approximately 670~gCO\textsubscript{2}/kWh in 2011 to around
+491~gCO\textsubscript{2}/kWh in 2025---because renewable capacity (wind,
+solar, hydro) is growing faster than total demand. However, thermal
+generation has also increased in absolute terms over the same period, as
+electricity consumption continues to rise with economic growth. The result
+is that the \emph{per-query} carbon footprint of AI inference in China is
+improving year by year, while \emph{total} grid CO\textsubscript{2}
+emissions from electricity remain elevated. For AI specifically, this
+means that falling per-query intensity does not automatically translate
+to a falling absolute carbon footprint: if inference query volume grows
+faster than the grid decarbonises---a plausible scenario given rapid AI
+adoption---the aggregate environmental cost continues to rise. This
+reinforces the importance of both grid transition and query-level
+efficiency improvements.
+
+\subsection{Future Work}
+
+Several natural extensions follow from this work. Substituting released NBS
+January-February figures for the 12/10 scaling estimate would improve
+annual accuracy. Extending provincial data to 2026 as records become
+complete would enable a three-year trend analysis. Developing
+province-specific WUE parameters would substantially improve water
+estimates. Integrating a live grid intensity API (such as Electricity Maps)
+would enable real-time per-query estimation in place of annual averages.
+
+\section{Conclusion}
+
+This paper introduced GreenInfer and EcoQuery, tools for estimating the
+CO\textsubscript{2} emissions and water footprint of a single AI inference
+query. By combining Ember global electricity data with NBS provincial
+generation data and the Ren et al.\ (2025) WUE methodology, the system
+covers 209 countries (2000--2025) and 31 Chinese provinces (2024--2025),
+and is the first to offer both dimensions in a single open-source package.
+
+The key findings are straightforward: per-query carbon footprint varies by
+more than 30$\times$ across Chinese provinces depending on the local grid,
+and 96\% of the water footprint comes from electricity generation rather
+than on-site cooling. Both results point to the same conclusion---where AI
+infrastructure is located matters enormously, and water deserves the same
+attention as carbon in AI sustainability assessments.
+
+GreenInfer and EcoQuery are publicly available, enabling researchers,
+developers, and policymakers to compare the environmental cost of AI
+services across regions and over time.
+
+\begin{thebibliography}{10}
+
+\bibitem{patterson2021}
+D.~Patterson et al.,
+``Carbon considerations for large language model training,''
+\emph{arXiv preprint arXiv:2104.10350}, 2021.
+
+\bibitem{codecarbon}
+V.~Lottick et al.,
+``Energy usage reports: Environmental awareness as part of algorithmic
+accountability,''
+\emph{NeurIPS Workshop on Tackling Climate Change with ML}, 2019.
+
+\bibitem{mlco2impact}
+A.~Lacoste, A.~Luccioni, V.~Schmidt, and T.~Dandres,
+``Quantifying the carbon emissions of machine learning,''
+\emph{arXiv preprint arXiv:1910.09700}, 2019.
+
+\bibitem{greenalgorithms}
+L.~Lannelongue, J.~Grealey, and M.~Inouye,
+``Green algorithms: Quantifying the carbon footprint of computation,''
+\emph{Advanced Science}, vol.~8, no.~12, p.~2100707, 2021.
+
+\bibitem{ren2025}
+Y.~Ren et al.,
+``Estimating the water footprint of AI model inference,''
+\emph{arXiv preprint arXiv:2505.09598}, 2025.
+
+\bibitem{ceads}
+S.~Guan et al.,
+``CEADs: A dataset of CO\textsubscript{2} emissions accounts for China,''
+\emph{Scientific Data}, vol.~8, no.~1, p.~193, 2021.
+
+\bibitem{li2023}
+S.~Li et al.,
+``Making AI less `thirsty': Uncovering and addressing the secret water
+footprint of AI models,''
+\emph{arXiv preprint arXiv:2304.03271}, 2023.
+
+\bibitem{ember}
+Ember,
+``Yearly Electricity Data,''
+\emph{Ember Climate}, 2025.
+[Online]. Available: \url{https://ember-climate.org/data/data-tools/data-explorer/}
+
+\bibitem{nbs}
+National Bureau of Statistics of China,
+``Monthly By Province: Output of Energy Products,''
+\emph{NBS Data}, 2024--2025.
+[Online]. Available: \url{https://data.stats.gov.cn}
+
+\bibitem{ipcc2014}
+O.~Edenhofer et al.\ (Eds.),
+\emph{Climate Change 2014: Mitigation of Climate Change.
+Contribution of Working Group~III to the Fifth Assessment Report of the IPCC},
+Cambridge University Press, 2014.
+
+\end{thebibliography}
+
+\end{document}

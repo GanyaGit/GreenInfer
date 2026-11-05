@@ -53,7 +53,7 @@ export default function App() {
       .catch(() => {});
 
     // Load all country names from 2023 (best coverage: 209 countries)
-    // This is used only for autocomplete — independent of the selected year
+    // This is used only for autocomplete - independent of the selected year
     fetch(`${API_BASE}/countries?year=2023`)
       .then(r => r.json())
       .then(data => setAllCountryNames((data.countries || []).map(c => c.name)))
@@ -115,7 +115,7 @@ export default function App() {
       setShowDropdown(false);
 
       const typeParam = `&type=${tab === "province" ? "province" : "country"}`;
-      // For countries: omit year — backend uses that country's own latest available year
+      // For countries: omit year - backend uses that country's own latest available year
       // For provinces: always send the selected year
       const yearParam = tab === "province" ? `&year=${year}` : "";
 
@@ -245,7 +245,7 @@ export default function App() {
           {result.type === "country" && result.latest_year && (
             <p style={styles.latestYearNote}>
               ℹ Latest Ember data for {result.location}: <strong>{result.latest_year}</strong>
-              {result.latest_year === result.year ? " (most recent)" : ` — showing ${result.year} data`}
+              {result.latest_year === result.year ? " (most recent)" : ` - showing ${result.year} data`}
             </p>
           )}
           <div style={styles.metrics}>
@@ -255,7 +255,7 @@ export default function App() {
           </div>
           <p style={styles.cardNote}>
             Energy: {result.energy_kwh * 1000} Wh/query (Patterson et al. 2021).
-            Water: global median per Ren et al. 2025 WUE method (PUE 1.4) — same for all regions.
+            Water: global median per Ren et al. 2025 WUE method (PUE 1.4) - same for all regions.
           </p>
         </div>
       )}
