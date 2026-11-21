@@ -45,13 +45,13 @@ CO₂ (g)              = intensity × energy_per_query_kWh
 
 Provincial intensity is derived from NBS monthly generation data (thermal, hydro, nuclear, wind, solar) using the IPCC AR5 lifecycle factor for coal (820 gCO₂/kWh). Country intensity comes from the Ember Yearly Electricity Data.
 
-**Water** (Ren et al. 2025, arXiv:2505.09598)
+**Water** (Li et al. 2025; Jegham et al. 2025, arXiv:2505.09598)
 
 ```
 water (mL) = ( (E / PUE) × WUE_onsite + E × WUE_offsite ) × 1000
 ```
 
-With PUE = 1.4, WUE_onsite = 0.25 L/kWh, WUE_offsite = 4.73 L/kWh, this gives about **4.91 mL per query**.
+With PUE = 1.27, WUE_onsite = 1.20 L/kWh, WUE_offsite = 6.016 L/kWh (Jegham et al. 2025, Chinese data centers), this gives about **6.96 mL per query**.
 
 ## Data sources
 
@@ -60,8 +60,8 @@ With PUE = 1.4, WUE_onsite = 0.25 L/kWh, WUE_offsite = 4.73 L/kWh, this gives ab
 | NBS Monthly Electricity by Province | 31 provinces, 2024-2025 | Province thermal fraction |
 | Ember Yearly Electricity Data | 209 countries | Country grid intensity |
 | IPCC AR5 (2014) | -- | Coal lifecycle factor: 820 gCO₂/kWh |
-| Patterson et al. (2021) | -- | Energy per query: ~0.001 kWh |
-| Ren et al. (2025) arXiv:2505.09598 | -- | WUE constants for water estimate |
+| Jegham et al. (2025) arXiv:2505.09598 | -- | Energy per query: ~0.001 kWh |
+| Jegham et al. (2025) arXiv:2505.09598 | -- | WUE constants for water estimate (Chinese data centers) |
 
 ## License
 

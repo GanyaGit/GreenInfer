@@ -29,9 +29,9 @@ except ImportError as _e:
     print(f"[EcoQuery] WARNING: greeninfer import failed: {_e}")
     CHINA_PROVINCES_BY_YEAR = {}
     ENERGY_PER_QUERY_KWH = 0.001
-    PUE = 1.4
-    WUE_ONSITE = 0.25
-    WUE_OFFSITE = 4.73
+    PUE = 1.27
+    WUE_ONSITE = 1.20
+    WUE_OFFSITE = 6.016
     def _load_latest_year_per_country():
         return {}
     def get_global_max_year():
