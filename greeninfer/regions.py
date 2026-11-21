@@ -1,11 +1,13 @@
 # greeninfer/regions.py
 # CO2 grid intensity by Chinese province (gCO2/kWh)
 # Source: NBS Monthly Electricity by Province (Nov 2023-Oct 2026)
+
 # Method: (Thermal_annual / Total_annual) x 820 gCO2/kWh (IPCC AR5, 2014)
+# Exception: Beijing uses 490 gCO2/kWh (natural gas, coal-free since 2017)
 
 CHINA_PROVINCES_BY_YEAR = {
     2024: {
-        "Beijing": 795,
+        "Beijing": 475,   # was 795 - gas factor 490 (Beijing coal-free since 2017)
         "Shanghai": 794,
         "Tianjin": 748,
         "Anhui": 738,
@@ -38,7 +40,7 @@ CHINA_PROVINCES_BY_YEAR = {
         "Xizang": 23,
     },
     2025: {
-        "Beijing": 787,
+        "Beijing": 470,   # was 787 - gas factor 490 (Beijing coal-free since 2017)
         "Shanghai": 784,
         "Tianjin": 729,
         "Anhui": 719,

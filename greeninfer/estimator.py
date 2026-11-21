@@ -15,12 +15,13 @@ import os
 import pandas as pd
 from .regions import CHINA_PROVINCES_BY_YEAR
 
-ENERGY_PER_QUERY_KWH = 0.001   # Patterson et al. (2021)
+ENERGY_PER_QUERY_KWH = 0.001   # Jegham et al. (2025), arXiv:2505.09598
 COAL_FACTOR          = 820     # gCO2/kWh - IPCC AR5 (2014) coal lifecycle
+GAS_FACTOR           = 490     # gCO2/kWh - IPCC AR5 (2014) gas lifecycle (Beijing only)
 
-PUE             = 1.4          # Power Usage Effectiveness, industry average
-WUE_ONSITE      = 0.25         # L/kWh on-site (Ren et al. 2025)
-WUE_OFFSITE     = 4.73         # L/kWh off-site (Ren et al. 2025)
+PUE                  = 1.27    # Jegham et al. (2025), Chinese data centers
+WUE_ONSITE           = 1.20    # L/kWh on-site
+WUE_OFFSITE          = 6.016   # L/kWh off-site
 
 WUE_ML_PER_KWH  = round(((1 / PUE) * WUE_ONSITE + WUE_OFFSITE) * 1000, 4)
 
