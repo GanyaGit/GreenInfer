@@ -1,7 +1,7 @@
 # greeninfer/estimator.py
 #
 # CO2:   intensity × energy_per_query_kWh
-# Water: Ren et al. (2025) WUE method
+# Water: Li et al. (2025) WUE method; Jegham et al. (2025) values, arXiv:2505.09598
 #           onsite  = (E / PUE) × WUE_ONSITE  × 1000  mL
 #           offsite = E          × WUE_OFFSITE × 1000  mL
 #
